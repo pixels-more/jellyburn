@@ -39,6 +39,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.4.2" date="2026-09-09">
+      <description>
+        <p>Fixed audio CD burns aborting with CD-Text enabled: cdrskin/wodim now run with the correct working directory, and CD-Text cue sheets use a single combined WAV file instead of one FILE entry per track. Added a persistent, full burn log with a "Show log" viewer in the burn dialog.</p>
+      </description>
+    </release>
     <release version="0.4.1" date="2026-07-11">
       <description>
         <p>About dialog with app info and support link, app logo, mini-player pause-icon fix, system dark-mode detection via the desktop portal, and a large internal refactor.</p>

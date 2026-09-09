@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jellyburn"
-version = "0.4.1"
+version = "0.4.2"
 description = "A GTK music player for Jellyfin with CD burning support"
 readme = "README.md"
 license = "MIT"

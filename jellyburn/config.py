@@ -1,3 +1,4 @@
+import glob
 import hashlib
 import json
 import os
@@ -87,6 +88,26 @@ def save_config(cfg):
 
 
 CACHE_DIR = os.path.join(CACHE_HOME, "jellyburn")
+LOG_DIR = os.path.join(CACHE_DIR, "logs")
+MAX_LOG_FILES = 20
+
+
+def _prune_old_logs():
+    logs = sorted(glob.glob(os.path.join(LOG_DIR, "burn_*.log")))
+    for path in logs[:-MAX_LOG_FILES]:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def new_log_path():
+    import datetime
+
+    os.makedirs(LOG_DIR, exist_ok=True)
+    _prune_old_logs()
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(LOG_DIR, f"burn_{stamp}.log")
 
 
 def _cache_path(server_url):
@@ -113,8 +134,6 @@ def save_library_cache(server_url, tracks):
 
 def detect_cd_devices():
     """Gibt Liste von (dev_path, label) für alle erkannten optischen Laufwerke zurück."""
-    import glob
-
     devices = []
     for sr in sorted(glob.glob("/sys/block/sr*")):
         name = os.path.basename(sr)
