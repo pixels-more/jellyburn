@@ -7,7 +7,12 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib, Pango
 
 from ..api import track_artist
-from ..config import CD_MAX_SECONDS
+from ..config import (
+    CD_DATA_MAX_BYTES,
+    CD_MAX_SECONDS,
+    DVD_DATA_MAX_BYTES,
+    MP3_BITRATE_KBPS,
+)
 from ..i18n import _
 from ..playlists import (
     list_playlists_info,
@@ -91,8 +96,21 @@ class PlaylistPane(Gtk.Box):
         self.cd_counter.get_style_context().add_class("cd-counter")
         self.cd_bar = Gtk.ProgressBar()
         self.cd_bar.get_style_context().add_class("cd-bar")
+        self.cd_bar.connect("size-allocate", self._on_cd_bar_allocate)
+        # Thin vertical line overlaid on the bar marking the 700 MB CD-sized
+        # data disc capacity once the bar has rescaled to the 4.7 GB DVD
+        # budget - lets you see at a glance whether a CD still suffices.
+        self._cd_marker_fraction = None
+        self.cd_marker = Gtk.Box()
+        self.cd_marker.get_style_context().add_class("cd-marker")
+        self.cd_marker.set_halign(Gtk.Align.START)
+        self.cd_marker.set_valign(Gtk.Align.FILL)
+        self.cd_marker.hide()
+        cd_overlay = Gtk.Overlay()
+        cd_overlay.add(self.cd_bar)
+        cd_overlay.add_overlay(self.cd_marker)
         cd_box.pack_start(self.cd_counter, False, False, 0)
-        cd_box.pack_start(self.cd_bar, False, False, 0)
+        cd_box.pack_start(cd_overlay, False, False, 0)
         tab_playlist.pack_start(cd_box, False, False, 0)
         tab_playlist.pack_start(Gtk.Separator(), False, False, 0)
 
@@ -493,10 +511,14 @@ class PlaylistPane(Gtk.Box):
                 show_error(toplevel, _("Load failed: {error}").format(error=e))
         dlg.destroy()
 
+    def _on_cd_bar_allocate(self, widget, allocation):
+        if self._cd_marker_fraction is None:
+            return
+        x = int(allocation.width * self._cd_marker_fraction)
+        self.cd_marker.set_margin_start(x)
+
     def _update_cd_counter(self):
         total_s = self.total_seconds()
-        fraction = min(total_s / CD_MAX_SECONDS, 1.0)
-        self.cd_bar.set_fraction(fraction)
 
         ctx = self.cd_bar.get_style_context()
         ctx.remove_class("cd-yellow")
@@ -505,15 +527,46 @@ class PlaylistPane(Gtk.Box):
         ctr_ctx.remove_class("over-limit")
 
         if total_s > CD_MAX_SECONDS:
-            ctx.add_class("cd-red")
-            ctr_ctx.add_class("over-limit")
-            self.cd_counter.set_text(
-                f"{seconds_to_mmss(total_s)} / {CD_MAX_LABEL}  ⚠ " + _("TOO LONG")
-            )
-        elif fraction > 0.85:
-            ctx.add_class("cd-yellow")
-            self.cd_counter.set_text(f"{seconds_to_mmss(total_s)} / {CD_MAX_LABEL}")
+            # Won't fit an audio CD - this is the same threshold at which
+            # burning switches to an MP3 data disc (see
+            # MainWindow._start_burn). Below the 700 MB CD-sized data disc
+            # budget, show that; above it, rescale the whole bar to the
+            # 4.7 GB DVD budget with a marker at the 700 MB mark, so it's
+            # clear a CD no longer suffices.
+            est_bytes = total_s * (MP3_BITRATE_KBPS * 1000 // 8)
+            needs_dvd = est_bytes > CD_DATA_MAX_BYTES
+            scale_max = DVD_DATA_MAX_BYTES if needs_dvd else CD_DATA_MAX_BYTES
+            fraction = min(est_bytes / scale_max, 1.0)
+            self.cd_bar.set_fraction(fraction)
+
+            if needs_dvd:
+                self._cd_marker_fraction = CD_DATA_MAX_BYTES / DVD_DATA_MAX_BYTES
+                self.cd_marker.show()
+                self._on_cd_bar_allocate(self.cd_bar, self.cd_bar.get_allocation())
+            else:
+                self._cd_marker_fraction = None
+                self.cd_marker.hide()
+
+            mb = est_bytes // 1_000_000
+            max_mb = scale_max // 1_000_000
+            disc = "MP3-DVD" if needs_dvd else "MP3-CD"
+            if est_bytes > scale_max:
+                ctx.add_class("cd-red")
+                ctr_ctx.add_class("over-limit")
+                self.cd_counter.set_text(
+                    f"~{mb} / {max_mb} MB ({disc})  ⚠ " + _("TOO LONG")
+                )
+            else:
+                if fraction > 0.85:
+                    ctx.add_class("cd-yellow")
+                self.cd_counter.set_text(f"~{mb} / {max_mb} MB ({disc})")
         else:
+            self._cd_marker_fraction = None
+            self.cd_marker.hide()
+            fraction = min(total_s / CD_MAX_SECONDS, 1.0)
+            self.cd_bar.set_fraction(fraction)
+            if fraction > 0.85:
+                ctx.add_class("cd-yellow")
             self.cd_counter.set_text(f"{seconds_to_mmss(total_s)} / {CD_MAX_LABEL}")
 
         self.burn_btn.set_sensitive(len(self.playlist_tracks) > 0)

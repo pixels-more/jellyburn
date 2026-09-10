@@ -6,6 +6,7 @@ from gi.repository import Gtk, GdkPixbuf
 from ..config import (
     CD_MAX_SECONDS,
     CD_DATA_MAX_BYTES,
+    DVD_DATA_MAX_BYTES,
     MP3_BITRATE_KBPS,
     load_config,
     save_config,
@@ -201,19 +202,42 @@ class MainWindow(Gtk.ApplicationWindow):
             return
         total_s = self.playlist.total_seconds()
         mode = "audio"
+        max_bytes = CD_DATA_MAX_BYTES
         if total_s > CD_MAX_SECONDS:
             est_bytes = total_s * (MP3_BITRATE_KBPS * 1000 // 8)
-            if est_bytes > CD_DATA_MAX_BYTES:
+            if est_bytes > DVD_DATA_MAX_BYTES:
                 show_error(
                     self,
                     _(
-                        "Playlist is too long even for an MP3 data CD (~{mb} MB estimated, limit ~700 MB)."
+                        "Playlist is too long even for an MP3 DVD (~{mb} MB estimated, limit ~4700 MB)."
                     ).format(mb=est_bytes // 1_000_000),
                 )
                 return
 
+            # Fits on a CD-sized MP3 disc (~700 MB) or needs the bigger
+            # ~4.7 GB DVD budget - either way we don't detect what's
+            # actually in the drive, just tell the user which blank to use.
+            needs_dvd = est_bytes > CD_DATA_MAX_BYTES
+            max_bytes = DVD_DATA_MAX_BYTES if needs_dvd else CD_DATA_MAX_BYTES
+
             if self.config.get("mp3_auto_switch"):
                 mode = "mp3"
+                if needs_dvd:
+                    info = Gtk.MessageDialog(
+                        transient_for=self,
+                        modal=True,
+                        message_type=Gtk.MessageType.INFO,
+                        buttons=Gtk.ButtonsType.OK,
+                        text=_("This playlist needs a DVD, not a CD"),
+                    )
+                    info.format_secondary_text(
+                        _(
+                            "The MP3s add up to more than a CD-sized data disc"
+                            " holds (~700 MB) - insert a blank DVD instead."
+                        )
+                    )
+                    info.run()
+                    info.destroy()
             else:
                 dlg = Gtk.MessageDialog(
                     transient_for=self,
@@ -222,12 +246,19 @@ class MainWindow(Gtk.ApplicationWindow):
                     buttons=Gtk.ButtonsType.NONE,
                     text=_("Playlist too long!"),
                 )
-                dlg.format_secondary_text(
-                    _(
-                        "The playlist is {duration} long – a CD holds only 74:00."
-                    ).format(duration=seconds_to_mmss(total_s))
+                secondary = _(
+                    "The playlist is {duration} long – a CD holds only 74:00."
+                ).format(duration=seconds_to_mmss(total_s))
+                if needs_dvd:
+                    secondary += "\n\n" + _(
+                        "It also exceeds a CD-sized MP3 disc (~700 MB) -"
+                        " insert a blank DVD instead of a CD."
+                    )
+                dlg.format_secondary_text(secondary)
+                dlg.add_button(
+                    _("Burn as MP3 DVD") if needs_dvd else _("Burn as MP3 data CD"),
+                    Gtk.ResponseType.OK,
                 )
-                dlg.add_button(_("Burn as MP3 data CD"), Gtk.ResponseType.OK)
                 dlg.add_button(_("Audio CD anyway"), Gtk.ResponseType.APPLY)
                 dlg.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
                 dlg.set_default_response(Gtk.ResponseType.OK)
@@ -241,7 +272,12 @@ class MainWindow(Gtk.ApplicationWindow):
                     return
 
         dlg = BurnDialog(
-            self, playlist_tracks, self.library.client, self.config, mode=mode
+            self,
+            playlist_tracks,
+            self.library.client,
+            self.config,
+            mode=mode,
+            max_bytes=max_bytes,
         )
         dlg.run()
         dlg.destroy()

@@ -11,18 +11,25 @@ from gi.repository import Gtk, GLib
 
 from .. import burner
 from ..api import track_artist
-from ..config import LOG_DIR, MP3_BITRATE_KBPS, check_dependencies, get_iso_tool
+from ..config import (
+    CD_DATA_MAX_BYTES,
+    LOG_DIR,
+    MP3_BITRATE_KBPS,
+    check_dependencies,
+    get_iso_tool,
+)
 from ..i18n import _
 
 
 class BurnDialog(Gtk.Dialog):
-    def __init__(self, parent, playlist, client, config, mode="audio"):
+    def __init__(self, parent, playlist, client, config, mode="audio", max_bytes=CD_DATA_MAX_BYTES):
         super().__init__(title=_("Burn CD"), transient_for=parent, modal=True)
         self.set_default_size(500, 400)
         self.playlist = playlist
         self.client = client
         self.config = config
         self.mode = mode
+        self.max_bytes = max_bytes
         self.cancelled = False
         self._burning = False
         self.last_log_path = None
@@ -34,11 +41,13 @@ class BurnDialog(Gtk.Dialog):
         box.set_margin_top(16)
         box.set_margin_bottom(16)
 
-        mode_text = (
-            _("Burning as: MP3 data CD ({kbps} kbps)").format(kbps=MP3_BITRATE_KBPS)
-            if mode == "mp3"
-            else _("Burning as: Audio CD")
-        )
+        if mode == "mp3":
+            disc = _("DVD") if max_bytes > CD_DATA_MAX_BYTES else _("CD")
+            mode_text = _("Burning as: MP3 data {disc} ({kbps} kbps)").format(
+                disc=disc, kbps=MP3_BITRATE_KBPS
+            )
+        else:
+            mode_text = _("Burning as: Audio CD")
         box.pack_start(
             Gtk.Label(label=f"<b>{mode_text}</b>", use_markup=True, xalign=0),
             False,
@@ -182,7 +191,14 @@ class BurnDialog(Gtk.Dialog):
         )
         try:
             if self.mode == "mp3":
-                burner.run_mp3_burn(self.playlist, self.client, self.config, tmpdir, cb)
+                burner.run_mp3_burn(
+                    self.playlist,
+                    self.client,
+                    self.config,
+                    tmpdir,
+                    cb,
+                    max_bytes=self.max_bytes,
+                )
             else:
                 burner.run_audio_burn(
                     self.playlist, self.client, self.config, tmpdir, cb

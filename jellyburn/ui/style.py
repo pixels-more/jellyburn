@@ -95,6 +95,11 @@ progressbar.cd-red progress {
     background-image: none;
     background-color: #e94560;
 }
+.cd-marker {
+    min-width: 2px;
+    background-color: #d8d8e0;
+    opacity: 0.6;
+}
 button {
     background-color: #1e1e30;
     border: 1px solid #2a2a40;

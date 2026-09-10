@@ -156,7 +156,9 @@ def probe_codec(path):
         capture_output=True,
         text=True,
     )
-    return probe.stdout.strip().lower()
+    # ffprobe's csv writer can leave a trailing separator even with a
+    # single field - strip it so the caller's "== 'mp3'" check matches.
+    return probe.stdout.strip().strip(",").lower()
 
 
 def convert_to_wav(src, dst, logger=None):
@@ -175,6 +177,9 @@ def convert_to_mp3(src, dst, logger=None):
         "-y",
         "-i",
         src,
+        "-map",
+        "0:a:0",
+        "-vn",
         "-codec:a",
         "libmp3lame",
         "-b:a",
@@ -392,9 +397,12 @@ def run_audio_burn(playlist, client, config, tmpdir, cb):
         cb.on_progress(1.0, _("Done!"))
 
 
-def run_mp3_burn(playlist, client, config, tmpdir, cb):
+def run_mp3_burn(playlist, client, config, tmpdir, cb, max_bytes=CD_DATA_MAX_BYTES):
     logger = BurnLogger()
-    logger.log(f"Starting MP3 data-CD burn, {len(playlist)} tracks")
+    logger.log(
+        f"Starting MP3 data-disc burn, {len(playlist)} tracks, "
+        f"max_bytes={max_bytes}"
+    )
     cd_root = os.path.join(tmpdir, "cd_root")
     os.makedirs(cd_root, exist_ok=True)
     total = len(playlist)
@@ -427,8 +435,18 @@ def run_mp3_burn(playlist, client, config, tmpdir, cb):
             logger.close()
             return
 
-        dst_name = sanitize_name(f"{i+1:02d} - {artist} - {name}") + ".mp3"
-        dst_path = os.path.join(cd_root, dst_name)
+        album = track.get("Album") or _("Unknown Album")
+        track_num = track.get("IndexNumber") or (i + 1)
+        album_dir = os.path.join(cd_root, sanitize_name(f"{artist} - {album}"))
+        os.makedirs(album_dir, exist_ok=True)
+        dst_name = sanitize_name(f"{track_num:02d} - {name}") + ".mp3"
+        dst_path = os.path.join(album_dir, dst_name)
+        if os.path.exists(dst_path):
+            # Same album + track number can happen with multi-disc albums
+            # or duplicate track numbers - keep both instead of overwriting.
+            dst_path = os.path.join(
+                album_dir, sanitize_name(f"{track_num:02d} - {name} ({i+1})") + ".mp3"
+            )
 
         codec = probe_codec(src_path)
         logger.log(f"Probed codec for {name}: {codec or '(unknown)'}")
@@ -448,8 +466,12 @@ def run_mp3_burn(playlist, client, config, tmpdir, cb):
             os.unlink(src_path)
 
         total_bytes += os.path.getsize(dst_path)
-        if total_bytes > CD_DATA_MAX_BYTES:
-            cb.on_status(_("Playlist exceeds data CD capacity (700 MB). Aborting."))
+        if total_bytes > max_bytes:
+            cb.on_status(
+                _("Playlist exceeds disc capacity ({mb} MB). Aborting.").format(
+                    mb=max_bytes // 1_000_000
+                )
+            )
             logger.close()
             return
 
