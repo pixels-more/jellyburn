@@ -3,6 +3,24 @@
 All notable changes to Jellyburn are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.4] - 2026-09-12
+
+### Added
+- MP3 data CD/DVD burns now group tracks into `Artist - Album` folders
+  instead of a flat file dump, so folder-capable MP3 players can
+  navigate by album. (#34)
+- MP3 playlists too large for a CD-sized data disc (~700 MB) can now
+  burn to a DVD-sized data disc (~4.7 GB) instead of just failing. (#35)
+
+### Fixed
+- MP3 conversion aborting when ffprobe reported the codec with a
+  trailing separator (skipped the already-MP3 fast path) or when a
+  track's embedded cover art was malformed/mislabeled. (#34)
+- The CD capacity bar now reflects MP3 mode once a playlist exceeds
+  74:00: it shows an estimated-MB reading against the CD-sized (700 MB)
+  or, if needed, DVD-sized (4.7 GB) budget instead of always counting
+  audio-CD minutes. (#35)
+
 ## [0.4.3] - 2026-09-09
 
 ### Fixed
