@@ -62,6 +62,20 @@ sudo usermod -aG cdrom $USER
 pip install jellyburn
 ```
 
+**Debian 12/13, Ubuntu 23.04+ and other distros with PEP 668:** plain `pip install` fails with
+`error: externally-managed-environment`. Use `pipx` instead. The
+`--system-site-packages` flag is required so the apt-provided `python3-gi` is visible:
+
+```bash
+sudo apt install pipx
+pipx ensurepath          # once, then reopen the terminal
+pipx install --system-site-packages jellyburn
+```
+
+Upgrade later with `pipx upgrade jellyburn`.
+
+Without `--system-site-packages` you will get `ModuleNotFoundError: No module named 'gi'`.
+
 Or run from source:
 
 ```bash
