@@ -3,6 +3,13 @@
 All notable changes to Jellyburn are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.5] - 2026-11-06
+
+### Changed
+- README: documented installing with `pipx install --system-site-packages jellyburn`
+  on distributions that enforce PEP 668 (Debian 12/13, Ubuntu 23.04+), where
+  plain `pip install` fails with `externally-managed-environment`. (#36)
+
 ## [0.4.4] - 2026-09-12
 
 ### Added
